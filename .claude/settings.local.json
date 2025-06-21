@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__cairo-coder__assist_with_cairo",
+      "mcp__sensei__dojo_sensei",
+      "Bash(scarb test:*)"
+    ],
+    "deny": []
+  }
+}
