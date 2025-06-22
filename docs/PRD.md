@@ -19,7 +19,7 @@ The game should be designed initially for the web but be built so that core comp
 - The current allowable turn player index is enforced at the smart contract level. A player can only submit a turn if it the current player index matches their position.
 
 ### Tile position change
-- Once per turn, a single position change is allowed.
+- Once per turn, a single position change is allowed. This means the player can choose to swap a hex cell with it's neighbour, if that cell and it's neighbour is unlocked. The tiles being swapped can be captured by either player.
 
 ### Hexagon Captures
 - A captured hexagon means that all the surrounding tiles of a given cell, including the cell itself, are marked captured by some player. The central tile is locked, and the unlocked tiles surrounding are replaced randomly at the end of the turn, regardless if they are captured. Once the tiles are replaced, points are awarded and the turn rotates to the next player.
