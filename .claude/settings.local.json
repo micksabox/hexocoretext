@@ -10,7 +10,9 @@
       "Bash(sozo:*)",
       "Bash(sed:*)",
       "Bash(mv:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }
