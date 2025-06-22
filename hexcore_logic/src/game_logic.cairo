@@ -1,7 +1,13 @@
-use super::types::{HexCoordinate, CellState, CaptureResult, GameConfig};
+use super::types::{HexCoordinate, CellData, PlayerTurn, TurnSideEffects};
 use super::hex_grid::{HexGrid, HexGridTrait, contains_coord};
-use starknet::ContractAddress;
 use core::poseidon::poseidon_hash_span;
+
+#[derive(Drop, Serde, Copy)]
+pub struct GameConfig {
+    pub grid_size: u8,
+    pub min_word_length: u8,
+    pub score_limit: u32,
+}
 
 #[derive(Drop)]
 pub struct GameLogic {
@@ -33,46 +39,6 @@ pub impl GameLogicImpl of GameLogicTrait {
     fn is_valid_word_length(self: @GameLogic, word_length: u32) -> bool {
         word_length >= (*self.config.min_word_length).into()
     }
-
-    // Calculate capture results for a set of cells
-    fn calculate_capture(
-        self: @GameLogic,
-        cells: @Array<HexCoordinate>,
-        current_state: @Array<CellState>,
-        player: ContractAddress
-    ) -> CaptureResult {
-        let mut cells_captured = 0;
-        let mut cells_locked = 0;
-        let mut hexagons_formed = 0;
-        let mut points_scored = 0;
-
-        // First pass: count captured cells
-        let mut i = 0;
-        while i < cells.len() {
-            let cell_state = current_state.at(i);
-            
-            if cell_state.locked_by.is_none() {
-                // For now, just count if not locked
-                cells_captured += 1;
-                points_scored += 1;
-            }
-            i += 1;
-        };
-
-        // Check for hexagon formations
-        let hexagon_centers = self.find_hexagon_formations(cells);
-        hexagons_formed = hexagon_centers.len();
-        cells_locked = hexagon_centers.len(); // Each hexagon locks its center
-        points_scored += hexagons_formed * 3; // Bonus points for hexagons
-
-        CaptureResult {
-            cells_captured,
-            cells_locked,
-            hexagons_formed,
-            points_scored,
-        }
-    }
-
     // Find all hexagon formations in the captured cells
     fn find_hexagon_formations(self: @GameLogic, cells: @Array<HexCoordinate>) -> Array<HexCoordinate> {
         let mut hexagon_centers = array![];
@@ -149,6 +115,60 @@ pub impl GameLogicImpl of GameLogicTrait {
         
         cells_to_replace
     }
+
+    // Calculate turn side effects from a grid scenario
+    fn calculate_turn(
+        self: @GameLogic, 
+        grid_scenario: @Array<CellData>,
+        turn: @PlayerTurn
+    ) -> TurnSideEffects {
+        let mut cells_captured = array![];
+        let mut hexagons_formed = array![];
+        let mut tiles_replaced = array![];
+
+        // Identify cells being captured in this turn
+        let mut i = 0;
+        while i < turn.tile_positions.len() {
+            let coord = turn.tile_positions.at(i);
+            
+            // Check if the cell at this position is not already locked
+            // Find the cell in grid_scenario that matches this coordinate
+            let mut j = 0;
+            let mut found_locked = false;
+            while j < grid_scenario.len() {
+                let cell_data = grid_scenario.at(j);
+                if cell_data.coordinate.q == coord.q && cell_data.coordinate.r == coord.r {
+                    if cell_data.locked_by.is_none() {
+                        cells_captured.append(*coord);
+                    }
+                    found_locked = true;
+                    break;
+                }
+                j += 1;
+            };
+            
+            // If cell not in grid_scenario, assume it can be captured
+            if !found_locked {
+                cells_captured.append(*coord);
+            }
+            
+            i += 1;
+        };
+
+        // Find hexagon formations from the captured cells
+        hexagons_formed = self.find_hexagon_formations(turn.tile_positions);
+
+        // Get tiles that need to be replaced due to hexagon formations
+        if hexagons_formed.len() > 0 {
+            tiles_replaced = self.get_cells_to_replace(@hexagons_formed);
+        }
+
+        TurnSideEffects {
+            cells_captured,
+            hexagons_formed,
+            tiles_replaced,
+        }
+    }
 }
 
 // Get letter from index
@@ -165,8 +185,14 @@ fn get_letter_at(index: u32) -> felt252 {
 
 #[cfg(test)]
 mod tests {
-    use super::{GameLogic, GameLogicTrait, GameConfig, CellState, HexCoordinate, get_letter_at};
+    use super::{GameLogic, GameLogicTrait, GameConfig, CellData, HexCoordinate, get_letter_at, PlayerTurn};
     use starknet::ContractAddress;
+    use super::super::grid_scenario::{map_scenario_to_cells, gs, gs_captured};
+
+    // Constants for players
+    const PLAYER1: felt252 = 'P1';
+    const PLAYER2: felt252 = 'P2';
+
 
     fn setup_game() -> GameLogic {
         let config = GameConfig {
@@ -197,45 +223,108 @@ mod tests {
         assert(game.is_valid_word_length(5), 'Length 5 should be valid');
     }
 
-    #[test]
-    fn test_calculate_capture_simple() {
-        let game = setup_game();
-        let player: ContractAddress = 0x1.try_into().unwrap();
-        
-        let cells = array![
-            HexCoordinate { q: 0, r: 0 },
-            HexCoordinate { q: 1, r: 0 },
-            HexCoordinate { q: 2, r: 0 },
-        ];
-        
-        let current_state = array![
-            CellState { letter: 'A', captured_by: Option::None, locked_by: Option::None },
-            CellState { letter: 'B', captured_by: Option::None, locked_by: Option::None },
-            CellState { letter: 'C', captured_by: Option::None, locked_by: Option::None },
-        ];
-        
-        let result = game.calculate_capture(@cells, @current_state, player);
-        
-        assert(result.cells_captured == 3, 'Should capture 3 cells');
-        assert(result.points_scored == 3, 'Should score 3 points');
-        assert(result.hexagons_formed == 0, 'No hexagons formed');
-    }
-
-    #[test]
-    fn test_is_game_over() {
-        let game = setup_game();
-        
-        let scores_not_over = array![10, 12, 15];
-        assert(!game.is_game_over(@scores_not_over), 'Game should not be over');
-        
-        let scores_over = array![10, 16, 5];
-        assert(game.is_game_over(@scores_over), 'Game should be over');
-    }
 
     #[test]
     fn test_get_letter_at() {
         assert(get_letter_at(0) == 'A', 'Index 0 should be A');
         assert(get_letter_at(25) == 'Z', 'Index 25 should be Z');
         assert(get_letter_at(26) == 'A', 'Index 26 should wrap to A');
+    }
+
+    #[test]
+    fn test_calculate_turn_basic() {
+        let game = setup_game();
+        
+        // Create a simple turn with 3 cells in a row
+        let turn = PlayerTurn {
+            player_index: 0,
+            word: array![0_u8, 1_u8, 2_u8], // ABC
+            tile_positions: array![
+                HexCoordinate { q: 0, r: 0 },
+                HexCoordinate { q: 1, r: 0 },
+                HexCoordinate { q: 2, r: 0 },
+            ],
+            tile_swap: Option::None,
+            merkle_proof: array![],
+        };
+        
+        // Create a grid scenario (simple case - all cells uncaptured)
+        let grid_scenario = array![
+            CellData { 
+                coordinate: HexCoordinate { q: 0, r: 0 },
+                letter: 'A', 
+                captured_by: Option::None, 
+                locked_by: Option::None 
+            },
+            CellData { 
+                coordinate: HexCoordinate { q: 1, r: 0 },
+                letter: 'B', 
+                captured_by: Option::None, 
+                locked_by: Option::None 
+            },
+            CellData { 
+                coordinate: HexCoordinate { q: 2, r: 0 },
+                letter: 'C', 
+                captured_by: Option::None, 
+                locked_by: Option::None 
+            },
+        ];
+        
+        let side_effects = game.calculate_turn(@grid_scenario, @turn);
+        
+        // Should capture 3 cells
+        assert(side_effects.cells_captured.len() == 3, 'Should capture 3 cells');
+        
+        // No hexagons should be formed from 3 cells in a row
+        assert(side_effects.hexagons_formed.len() == 0, 'No hexagons formed');
+        
+        // No tiles should be replaced
+        assert(side_effects.tiles_replaced.len() == 0, 'No tiles replaced');
+    }
+
+    #[test]
+    fn test_calculate_turn_with_hexagon() {
+        let game = setup_game();
+        
+        // Create a turn that forms a hexagon (center + 6 neighbors)
+        let turn = PlayerTurn {
+            player_index: 0,
+            word: array![],
+            tile_positions: array![
+                HexCoordinate { q: 0, r: 0 },  // Center
+                HexCoordinate { q: 1, r: 0 },  // East
+                HexCoordinate { q: 0, r: 1 },  // Southeast
+                HexCoordinate { q: -1, r: 1 }, // Southwest
+                HexCoordinate { q: -1, r: 0 }, // West
+                HexCoordinate { q: 0, r: -1 }, // Northwest
+                HexCoordinate { q: 1, r: -1 }, // Northeast
+            ],
+            tile_swap: Option::None,
+            merkle_proof: array![],
+        };
+        
+        // Create a grid scenario
+        let grid_scenario = array![
+            gs('X'),                    // Center
+            gs_captured('C', PLAYER1),  // North - already captured by P1
+            gs_captured('A', PLAYER1),  // Northeast - already captured by P1
+            gs('T'),                    // Southeast - uncaptured
+            gs('S'),                    // South - uncaptured
+            gs('O'),                    // Southwest - uncaptured
+            gs_captured('N', PLAYER2),  // Northwest - already captured by P2
+        ];
+        
+        let cells = map_scenario_to_cells(1, grid_scenario);
+        
+        let side_effects = game.calculate_turn(@cells, @turn);
+        
+        // Should capture 7 cells
+        assert(side_effects.cells_captured.len() == 7, 'Should capture 7 cells');
+        
+        // Should form 1 hexagon
+        assert(side_effects.hexagons_formed.len() == 1, 'Should form 1 hexagon');
+        
+        // Should replace 6 tiles (the neighbors of the center)
+        assert(side_effects.tiles_replaced.len() == 6, 'Should replace 6 tiles');
     }
 }

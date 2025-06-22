@@ -38,7 +38,7 @@ mod tests {
         
         let north = cells.at(1);
         assert(*north.letter == 'E', 'North letter');
-        assert(*north.captured_by == Option::Some(player1), 'North captured');
+        assert(*north.captured_by == Option::Some(player1.try_into().unwrap()), 'North captured');
     }
 
     #[test]
@@ -65,7 +65,7 @@ mod tests {
         // Verify captured cell in ring 2
         let ring2_first = cells.at(7);
         assert(*ring2_first.letter == 'G', 'Ring 2 first letter');
-        assert(*ring2_first.captured_by == Option::Some(player1), 'Ring 2 first captured');
+        assert(*ring2_first.captured_by == Option::Some(player1.try_into().unwrap()), 'Ring 2 first captured');
     }
 
     #[test]
@@ -90,7 +90,7 @@ mod tests {
         let mut i = 0;
         while i < cells.len() {
             let cell = cells.at(i);
-            assert(*cell.captured_by == Option::Some(player1), 'All captured');
+            assert(*cell.captured_by == Option::Some(player1.try_into().unwrap()), 'All captured');
             i += 1;
         };
     }
@@ -118,12 +118,12 @@ mod tests {
         assert(center.captured_by.is_none(), 'Center neutral');
         
         let northeast = cells.at(2);
-        assert(*northeast.captured_by == Option::Some(player1), 'NE captured by P1');
-        assert(*northeast.locked_by == Option::Some(player1), 'NE locked by P1');
+        assert(*northeast.captured_by == Option::Some(player1.try_into().unwrap()), 'NE captured by P1');
+        assert(*northeast.locked_by == Option::Some(player1.try_into().unwrap()), 'NE locked by P1');
         
         let south = cells.at(4);
-        assert(*south.captured_by == Option::Some(player2), 'S captured by P2');
-        assert(*south.locked_by == Option::Some(player2), 'S locked by P2');
+        assert(*south.captured_by == Option::Some(player2.try_into().unwrap()), 'S captured by P2');
+        assert(*south.locked_by == Option::Some(player2.try_into().unwrap()), 'S locked by P2');
     }
 
     #[test]

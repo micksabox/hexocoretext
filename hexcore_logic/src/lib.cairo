@@ -9,7 +9,7 @@ pub mod grid_scenario;
 pub mod tests;
 
 // Re-export main types and functions
-pub use types::{HexCoordinate, Direction, CellState, GameConfig};
+pub use types::{HexCoordinate, Direction, CellData};
 pub use hex_grid::{HexGrid, HexGridTrait};
-pub use game_logic::{GameLogic, GameLogicTrait};
+pub use game_logic::{GameLogic, GameLogicTrait, GameConfig};
 pub use word_validator::{WordValidator, WordValidatorTrait};

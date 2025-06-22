@@ -17,18 +17,29 @@ pub enum Direction {
     Northwest,
 }
 
+// Cell data that includes position and state
 #[derive(Drop, Serde, Copy, Debug, PartialEq)]
-pub struct CellState {
+pub struct CellData {
+    pub coordinate: HexCoordinate,
     pub letter: felt252,
     pub captured_by: Option<ContractAddress>,
     pub locked_by: Option<ContractAddress>,
 }
 
+// Player turn structure
+#[derive(Drop, Serde)]
+pub struct PlayerTurn {
+    pub player_index: u8,
+    pub word: Array<u8>,
+    pub tile_positions: Array<HexCoordinate>,
+    pub tile_swap: Option<TileSwap>,
+    pub merkle_proof: Array<felt252>,
+}
+
 #[derive(Drop, Serde, Copy)]
-pub struct GameConfig {
-    pub grid_size: u8,
-    pub min_word_length: u8,
-    pub score_limit: u32,
+pub struct TileSwap {
+    pub from: HexCoordinate,
+    pub to: HexCoordinate,
 }
 
 // Game calculation results
@@ -45,6 +56,14 @@ pub struct HexagonCheck {
     pub is_hexagon: bool,
     pub center: HexCoordinate,
     pub surrounding_cells: Array<HexCoordinate>,
+}
+
+// Turn side effects structure
+#[derive(Drop, Serde)]
+pub struct TurnSideEffects {
+    pub cells_captured: Array<HexCoordinate>,
+    pub hexagons_formed: Array<HexCoordinate>,  // Centers of hexagons
+    pub tiles_replaced: Array<HexCoordinate>,
 }
 
 // Trait definition for HexCoordinate

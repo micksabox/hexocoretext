@@ -1,18 +1,9 @@
-use super::types::HexCoordinate;
+use super::types::CellData;
 use super::spiral_coords::generate_spiral_coordinates;
 
 // Grid scenario structure for easy test setup
 #[derive(Drop)]
 pub struct GridScenario {
-    pub letter: felt252,
-    pub captured_by: Option<felt252>,
-    pub locked_by: Option<felt252>,
-}
-
-// Cell data that includes position and state
-#[derive(Drop)]
-pub struct CellData {
-    pub coordinate: HexCoordinate,
     pub letter: felt252,
     pub captured_by: Option<felt252>,
     pub locked_by: Option<felt252>,
@@ -32,11 +23,22 @@ pub fn map_scenario_to_cells(
         let coord = *coords.at(i);
         let scenario_cell = scenario.at(i);
         
+        // Convert felt252 options to ContractAddress options
+        let captured_by = match *scenario_cell.captured_by {
+            Option::Some(addr_felt) => Option::Some(addr_felt.try_into().unwrap()),
+            Option::None => Option::None,
+        };
+        
+        let locked_by = match *scenario_cell.locked_by {
+            Option::Some(addr_felt) => Option::Some(addr_felt.try_into().unwrap()),
+            Option::None => Option::None,
+        };
+        
         cells.append(CellData {
             coordinate: coord,
             letter: *scenario_cell.letter,
-            captured_by: *scenario_cell.captured_by,
-            locked_by: *scenario_cell.locked_by,
+            captured_by,
+            locked_by,
         });
         
         i += 1;
@@ -119,12 +121,12 @@ mod tests {
         let cells = map_scenario_to_cells(1, scenario);
         
         let cell0 = cells.at(0);
-        assert(*cell0.captured_by == Option::Some(player1), 'Cell 0 captured');
+        assert(*cell0.captured_by == Option::Some(player1.try_into().unwrap()), 'Cell 0 captured');
         
         let cell1 = cells.at(1);
         assert(*cell1.captured_by == Option::None, 'Cell 1 not captured');
         
         let cell2 = cells.at(2);
-        assert(*cell2.captured_by == Option::Some(player2), 'Cell 2 captured');
+        assert(*cell2.captured_by == Option::Some(player2.try_into().unwrap()), 'Cell 2 captured');
     }
 }
