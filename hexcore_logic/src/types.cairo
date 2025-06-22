@@ -63,6 +63,7 @@ pub struct HexagonCheck {
 pub struct TurnSideEffects {
     pub cells_captured: Array<HexCoordinate>,
     pub hexagons_formed: Array<HexCoordinate>,  // Centers of hexagons
+    pub superhexagons_formed: Array<HexCoordinate>,  // Centers of super hexagons
     pub tiles_replaced: Array<HexCoordinate>,
 }
 

@@ -4,6 +4,7 @@ pub mod word_validator;
 pub mod types;
 pub mod spiral_coords;
 pub mod grid_scenario;
+pub mod cell_map;
 
 #[cfg(test)]
 pub mod tests;

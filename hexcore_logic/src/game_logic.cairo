@@ -1,5 +1,6 @@
 use super::types::{HexCoordinate, CellData, PlayerTurn, TurnSideEffects};
 use super::hex_grid::{HexGrid, HexGridTrait, contains_coord};
+use super::cell_map::{CellMap, CellMapTrait};
 use core::poseidon::poseidon_hash_span;
 
 #[derive(Drop, Serde, Copy)]
@@ -56,6 +57,26 @@ pub impl GameLogicImpl of GameLogicTrait {
         hexagon_centers
     }
 
+    // Find all super hexagon formations (center + 6 neighbors all locked)
+    fn find_super_hexagon_formations(self: @GameLogic, ref cell_map: CellMap) -> Array<HexCoordinate> {
+        let mut super_hexagon_centers = array![];
+        
+        // Get all coordinates from the grid
+        let all_coords = self.grid.get_all_coordinates();
+        
+        // For each coordinate, check if it's the center of a super hexagon
+        let mut i = 0;
+        while i < all_coords.len() {
+            let potential_center = all_coords.at(i);
+            if self.is_super_hexagon_center(ref cell_map, potential_center) {
+                super_hexagon_centers.append(*potential_center);
+            }
+            i += 1;
+        };
+        
+        super_hexagon_centers
+    }
+
     // Check if a cell is the center of a complete hexagon
     fn is_hexagon_center(self: @GameLogic, cells: @Array<HexCoordinate>, center: @HexCoordinate) -> bool {
         let neighbors = self.grid.get_neighbors(center);
@@ -76,6 +97,40 @@ pub impl GameLogicImpl of GameLogicTrait {
         };
         
         all_present
+    }
+
+    // Check if a cell is the center of a super hexagon (all 7 cells locked)
+    fn is_super_hexagon_center(self: @GameLogic, ref cell_map: CellMap, center: @HexCoordinate) -> bool {
+        let neighbors = self.grid.get_neighbors(center);
+        
+        // Must have exactly 6 neighbors (not on edge)
+        if neighbors.len() != 6 {
+            return false;
+        }
+        
+        // Check if center is locked
+        let center_locked_by = cell_map.get_locked_by(center);
+        
+        // Center must be locked
+        if center_locked_by.is_none() {
+            return false;
+        }
+        
+        // All neighbors must be locked (by any player)
+        let mut i = 0;
+        let mut all_locked = true;
+        while i < neighbors.len() && all_locked {
+            let neighbor_coord = neighbors.at(i);
+            let neighbor_locked_by = cell_map.get_locked_by(neighbor_coord);
+            
+            if neighbor_locked_by.is_none() {
+                all_locked = false;
+            }
+            
+            i += 1;
+        };
+        
+        all_locked
     }
 
     // Check if the game is over (score limit reached)
@@ -124,31 +179,21 @@ pub impl GameLogicImpl of GameLogicTrait {
     ) -> TurnSideEffects {
         let mut cells_captured = array![];
         let mut hexagons_formed = array![];
+        let mut superhexagons_formed = array![];
         let mut tiles_replaced = array![];
+
+        // Create a CellMap for O(1) lookups
+        let mut cell_map = CellMapTrait::from_array(grid_scenario);
 
         // Identify cells being captured in this turn
         let mut i = 0;
         while i < turn.tile_positions.len() {
             let coord = turn.tile_positions.at(i);
+
+            let is_locked = cell_map.is_locked(coord);
             
             // Check if the cell at this position is not already locked
-            // Find the cell in grid_scenario that matches this coordinate
-            let mut j = 0;
-            let mut found_locked = false;
-            while j < grid_scenario.len() {
-                let cell_data = grid_scenario.at(j);
-                if cell_data.coordinate.q == coord.q && cell_data.coordinate.r == coord.r {
-                    if cell_data.locked_by.is_none() {
-                        cells_captured.append(*coord);
-                    }
-                    found_locked = true;
-                    break;
-                }
-                j += 1;
-            };
-            
-            // If cell not in grid_scenario, assume it can be captured
-            if !found_locked {
+            if !is_locked {
                 cells_captured.append(*coord);
             }
             
@@ -158,14 +203,41 @@ pub impl GameLogicImpl of GameLogicTrait {
         // Find hexagon formations from the captured cells
         hexagons_formed = self.find_hexagon_formations(turn.tile_positions);
 
+        // Find super hexagon formations
+        superhexagons_formed = self.find_super_hexagon_formations(ref cell_map);
+
         // Get tiles that need to be replaced due to hexagon formations
         if hexagons_formed.len() > 0 {
             tiles_replaced = self.get_cells_to_replace(@hexagons_formed);
+        }
+        
+        // Add super hexagon tiles to tiles that need to be replaced
+        if superhexagons_formed.len() > 0 {
+            let mut i = 0;
+            while i < superhexagons_formed.len() {
+                let super_center = superhexagons_formed.at(i);
+                // Add the center
+                if !contains_coord(@tiles_replaced, super_center) {
+                    tiles_replaced.append(*super_center);
+                }
+                // Add all neighbors
+                let neighbors = self.grid.get_neighbors(super_center);
+                let mut j = 0;
+                while j < neighbors.len() {
+                    let neighbor = neighbors.at(j);
+                    if !contains_coord(@tiles_replaced, neighbor) {
+                        tiles_replaced.append(*neighbor);
+                    }
+                    j += 1;
+                };
+                i += 1;
+            };
         }
 
         TurnSideEffects {
             cells_captured,
             hexagons_formed,
+            superhexagons_formed,
             tiles_replaced,
         }
     }
@@ -186,7 +258,6 @@ fn get_letter_at(index: u32) -> felt252 {
 #[cfg(test)]
 mod tests {
     use super::{GameLogic, GameLogicTrait, GameConfig, CellData, HexCoordinate, get_letter_at, PlayerTurn};
-    use starknet::ContractAddress;
     use super::super::grid_scenario::{map_scenario_to_cells, gs, gs_captured};
 
     // Constants for players
@@ -278,6 +349,9 @@ mod tests {
         // No hexagons should be formed from 3 cells in a row
         assert(side_effects.hexagons_formed.len() == 0, 'No hexagons formed');
         
+        // No super hexagons should be formed
+        assert(side_effects.superhexagons_formed.len() == 0, 'No super hexagons');
+        
         // No tiles should be replaced
         assert(side_effects.tiles_replaced.len() == 0, 'No tiles replaced');
     }
@@ -323,6 +397,9 @@ mod tests {
         
         // Should form 1 hexagon
         assert(side_effects.hexagons_formed.len() == 1, 'Should form 1 hexagon');
+        
+        // No super hexagons in this test
+        assert(side_effects.superhexagons_formed.len() == 0, 'No super hexagons');
         
         // Should replace 6 tiles (the neighbors of the center)
         assert(side_effects.tiles_replaced.len() == 6, 'Should replace 6 tiles');
