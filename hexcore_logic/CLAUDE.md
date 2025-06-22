@@ -1,0 +1,2 @@
+- Core game logic separate from Dojo goes here.
+- Use scarb for building and testing instead of sozo.

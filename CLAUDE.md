@@ -7,3 +7,9 @@
 - sensei can help you with dojo related questions and architecture
 
 - use @example.PNG as a reference
+
+- Ignore the other game under the /contract folder that is separate from the hexocoretext game in /src
+
+- Core game logic separate from dojo should go in /hexcore_logic. Use scarb to build and test this folder.
+
+- The Dojo logic lives under /src. The `sozo` command should be used to build and test this folder.

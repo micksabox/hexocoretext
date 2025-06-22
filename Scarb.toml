@@ -1,0 +1,20 @@
+[package]
+name = "hexocoretext"
+cairo-version = "2.10.1"
+version = "0.1.0"
+edition = "2024_07"
+
+[cairo]
+sierra-replace-ids = true
+
+[[target.starknet-contract]]
+build-external-contracts = ["dojo::world::world_contract::world"]
+
+
+[dependencies]
+dojo = { git = "https://github.com/dojoengine/dojo", tag = "v1.5.1" }
+hexcore_logic = { path = "./hexcore_logic" }
+
+[dev-dependencies]
+cairo_test = "2.10.1"
+dojo_cairo_test = { git = "https://github.com/dojoengine/dojo", tag = "v1.5.1" }
