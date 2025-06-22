@@ -1,8 +1,8 @@
-1. Title and Overview: A brief introduction to the document, including the product name, version, and a high-level summary of what the product is and its purpose. 	
+1. Title and Overview: A brief introduction to the document, including the product name, version, and a high-level summary of what the product is and its purpose.	
 2. Objective: A clear statement of the product’s goals and objectives, explaining why the product is being developed and what problems it aims to solve.
-3. Scope: Defines the boundaries of the product, including what will and will not be included in the product’s development. 
+3. Scope: Defines the boundaries of the product, including what will and will not be included in the product’s development.
 4. Stakeholders: Identification of key stakeholders involved in the product development process, such as product managers, developers, designers, and end-users.
-5. User Personas: Detailed descriptions of the target users, including their needs, behaviors, and how they will interact with the product. 
+5. User Personas: Detailed descriptions of the target users, including their needs, behaviors, and how they will interact with the product.
 ## Title and Overview
 This document describes a casual word game application, Hexcoretext. The game logic is executed onchain to guarantee fairness and rule integrity with verifiability. There is a hexagonal grid which is initially filled randomly with an alphabet letter in each tile. Then, up to 2 players take turns in capturing tiles that connect with each other on the hexagonal grid. Each time a hexagon is formed from captured tiles, the player with the majority of those captures is granted a point. The first to 16 points is declared game winner.
 ### Objective
