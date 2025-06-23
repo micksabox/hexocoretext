@@ -1,6 +1,6 @@
 use starknet::{ContractAddress, contract_address_const};
 use dojo::world::{WorldStorage, WorldStorageTrait};
-use dojo::model::{ModelStorage};
+use dojo::model::{ModelStorage, ModelStorageTest};
 use dojo_cairo_test::{
     spawn_test_world, NamespaceDef, TestResource, ContractDefTrait,
     WorldStorageTestTrait,
@@ -116,7 +116,7 @@ pub fn set_cell_letters(mut world: WorldStorage, game_id: u32, positions: @Array
         let coord = *positions[i];
         let mut cell: Cell = world.read_model((game_id, coord.q, coord.r));
         cell.letter = *letters[i];
-        world.write_model(@cell);
+        world.write_model_test(@cell);
         i += 1;
     };
 }

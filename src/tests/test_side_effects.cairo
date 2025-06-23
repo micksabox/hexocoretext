@@ -1,6 +1,7 @@
 use starknet::{contract_address_const};
 use dojo::world::{WorldStorage};
-use dojo::model::{ModelStorage};
+use dojo::model::{ModelStorage, ModelStorageTest};
+use dojo_cairo_test::{WorldStorageTestTrait};
 
 use crate::models::{Cell, HexCoordinate, TileSwap};
 use crate::systems::game::{IGameActionsDispatcherTrait};
@@ -29,14 +30,14 @@ fn setup_hexagon_cells(mut world: WorldStorage, game_id: u32, center_q: i32, cen
         let (q, r) = *neighbors[i];
         let mut cell: Cell = world.read_model((game_id, q, r));
         cell.letter = 'H';
-        world.write_model(@cell);
+        world.write_model_test(@cell);
         i += 1;
     };
     
     // Set center cell
     let mut center_cell: Cell = world.read_model((game_id, center_q, center_r));
     center_cell.letter = 'H';
-    world.write_model(@center_cell);
+    world.write_model_test(@center_cell);
 }
 
 #[test]
@@ -108,7 +109,7 @@ fn test_hexagon_formation_locks_center() {
         let coord = *hex_positions[i];
         let mut cell: Cell = world.read_model((game_id, coord.q, coord.r));
         cell.captured_by = Option::Some(current_player);
-        world.write_model(@cell);
+        world.write_model_test(@cell);
         i += 1;
     };
     
@@ -143,11 +144,11 @@ fn test_tile_swap() {
     
     let mut cell_from: Cell = world.read_model((game_id, swap_from.q, swap_from.r));
     cell_from.letter = 'X';
-    world.write_model(@cell_from);
+    world.write_model_test(@cell_from);
     
     let mut cell_to: Cell = world.read_model((game_id, swap_to.q, swap_to.r));
     cell_to.letter = 'Y';
-    world.write_model(@cell_to);
+    world.write_model_test(@cell_to);
     
     // Submit turn with tile swap
     let tile_swap = Option::Some(TileSwap { from: swap_from, to: swap_to });
@@ -269,7 +270,7 @@ fn test_locked_cells_cannot_be_captured() {
     let mut locked_cell: Cell = world.read_model((game_id, locked_coord.q, locked_coord.r));
     locked_cell.locked_by = Option::Some(player1);
     locked_cell.captured_by = Option::Some(player1);
-    world.write_model(@locked_cell);
+    world.write_model_test(@locked_cell);
     
     // Get current player (might be player1 or player2)
     let current_player = get_current_player_address(@world, @game_actions, game_id);
@@ -324,7 +325,7 @@ fn test_game_over_event() {
     // Manually set player score close to limit
     let mut player_state = get_player(@world, game_id, current_player);
     player_state.score = 4;
-    world.write_model(@player_state);
+    world.write_model_test(@player_state);
     
     // Setup word
     let positions = create_horizontal_word_positions(0, 0, 3);

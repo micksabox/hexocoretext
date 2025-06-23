@@ -1,5 +1,6 @@
 use starknet::{contract_address_const};
-use dojo::model::{ModelStorage};
+use dojo::model::{ModelStorage, ModelStorageTest};
+use dojo_cairo_test::{WorldStorageTestTrait};
 
 use crate::models::{HexCoordinate};
 use crate::systems::game::{IGameActionsDispatcherTrait};
@@ -96,7 +97,7 @@ fn test_game_starts_with_two_players() {
 }
 
 #[test]
-#[should_panic(expected: ('Game is full',))]
+#[should_panic(expected: ('Game is full', 'ENTRYPOINT_FAILED'))]
 fn test_cannot_join_full_game() {
     let (_world, game_actions) = setup_world();
     let game_id = create_test_game(game_actions);
@@ -110,7 +111,7 @@ fn test_cannot_join_full_game() {
 }
 
 #[test]
-#[should_panic(expected: ('Already joined',))]
+#[should_panic(expected: ('Already joined', 'ENTRYPOINT_FAILED'))]
 fn test_cannot_join_twice() {
     let (_world, game_actions) = setup_world();
     let game_id = create_test_game(game_actions);
@@ -162,7 +163,7 @@ fn test_turn_changes_player() {
 }
 
 #[test]
-#[should_panic(expected: ('Not your turn',))]
+#[should_panic(expected: ('Not your turn', 'ENTRYPOINT_FAILED'))]
 fn test_cannot_play_out_of_turn() {
     let (mut world, game_actions) = setup_world();
     let game_id = create_test_game(game_actions);
@@ -189,7 +190,7 @@ fn test_cannot_play_out_of_turn() {
 }
 
 #[test]
-#[should_panic(expected: ('Game not active',))]
+#[should_panic(expected: ('Game not active', 'ENTRYPOINT_FAILED'))]
 fn test_cannot_play_before_game_starts() {
     let (mut world, game_actions) = setup_world();
     let game_id = create_test_game(game_actions);
@@ -228,7 +229,7 @@ fn test_game_ends_when_score_limit_reached() {
     // Manually update player score to just below limit
     let mut player_state = get_player(@world, game_id, current_player);
     player_state.score = 0;
-    world.write_model(@player_state);
+    world.write_model_test(@player_state);
     
     // Setup word that will give points
     let positions = create_horizontal_word_positions(0, 0, 4);
