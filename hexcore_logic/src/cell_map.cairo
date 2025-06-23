@@ -139,6 +139,48 @@ pub impl CellMapImpl of CellMapTrait {
             Option::None => Option::None,
         }
     }
+
+    // Get captured_by for a coordinate
+    fn get_captured_by(ref self: CellMap, coord: @HexCoordinate) -> Option<starknet::ContractAddress> {
+        match self.get(coord) {
+            Option::Some(cell) => cell.captured_by,
+            Option::None => Option::None,
+        }
+    }
+
+    // Set captured_by for a coordinate
+    fn set_captured_by(ref self: CellMap, coord: @HexCoordinate, captured_by: Option<starknet::ContractAddress>) {
+        let key = hash_coordinate(coord);
+        
+        // Update captured_by
+        let captured_value = match captured_by {
+            Option::Some(addr) => addr.into(),
+            Option::None => 0,
+        };
+        self.captured_by_map.insert(key, captured_value);
+        
+        // Ensure the coordinate is marked as existing if setting a value
+        if captured_by.is_some() {
+            self.exists_map.insert(key, true);
+        }
+    }
+
+    // Set locked_by for a coordinate
+    fn set_locked_by(ref self: CellMap, coord: @HexCoordinate, locked_by: Option<starknet::ContractAddress>) {
+        let key = hash_coordinate(coord);
+        
+        // Update locked_by
+        let locked_value = match locked_by {
+            Option::Some(addr) => addr.into(),
+            Option::None => 0,
+        };
+        self.locked_by_map.insert(key, locked_value);
+        
+        // Ensure the coordinate is marked as existing if setting a value
+        if locked_by.is_some() {
+            self.exists_map.insert(key, true);
+        }
+    }
 }
 
 #[cfg(test)]

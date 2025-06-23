@@ -2,6 +2,7 @@ use super::types::{HexCoordinate, CellData, PlayerTurn, TurnSideEffects};
 use super::hex_grid::{HexGrid, HexGridTrait, contains_coord};
 use super::cell_map::{CellMap, CellMapTrait};
 use core::poseidon::poseidon_hash_span;
+use starknet::{ContractAddress, contract_address_const};
 
 #[derive(Drop, Serde, Copy)]
 pub struct GameConfig {
@@ -57,6 +58,26 @@ pub impl GameLogicImpl of GameLogicTrait {
         hexagon_centers
     }
 
+    // Find all hexagon formations by checking entire grid
+    fn find_all_hexagon_formations(self: @GameLogic, ref cell_map: CellMap) -> Array<HexCoordinate> {
+        let mut hexagon_centers = array![];
+        
+        // Get all coordinates from the grid
+        let all_coords = self.grid.get_all_coordinates();
+        
+        // For each coordinate, check if it's the center of a complete hexagon
+        let mut i = 0;
+        while i < all_coords.len() {
+            let potential_center = all_coords.at(i);
+            if self.is_complete_hexagon_center(ref cell_map, potential_center) {
+                hexagon_centers.append(*potential_center);
+            }
+            i += 1;
+        };
+        
+        hexagon_centers
+    }
+
     // Find all super hexagon formations (center + 6 neighbors all locked)
     fn find_super_hexagon_formations(self: @GameLogic, ref cell_map: CellMap) -> Array<HexCoordinate> {
         let mut super_hexagon_centers = array![];
@@ -97,6 +118,33 @@ pub impl GameLogicImpl of GameLogicTrait {
         };
         
         all_present
+    }
+
+    // Check if a cell is the center of a complete hexagon (all cells captured)
+    fn is_complete_hexagon_center(self: @GameLogic, ref cell_map: CellMap, center: @HexCoordinate) -> bool {
+        let neighbors = self.grid.get_neighbors(center);
+        
+        // Must have exactly 6 neighbors (not on edge)
+        if neighbors.len() != 6 {
+            return false;
+        }
+        
+        // Check if center is captured
+        if !cell_map.is_captured(center) {
+            return false;
+        }
+        
+        // All neighbors must be captured (by any player)
+        let mut i = 0;
+        let mut all_captured = true;
+        while i < neighbors.len() && all_captured {
+            if !cell_map.is_captured(neighbors.at(i)) {
+                all_captured = false;
+            }
+            i += 1;
+        };
+        
+        all_captured
     }
 
     // Check if a cell is the center of a super hexagon (all 7 cells locked)
@@ -146,6 +194,31 @@ pub impl GameLogicImpl of GameLogicTrait {
         game_over
     }
 
+    // Determine the majority owner of a hexagon (center + 6 neighbors)
+    fn get_hexagon_majority_owner(self: @GameLogic, ref cell_map: CellMap, center: @HexCoordinate) -> Option<ContractAddress> {
+        let neighbors = self.grid.get_neighbors(center);
+        
+        // Count ownership - using Option to track different owners
+        let mut owner_counts: Array<(ContractAddress, u32)> = array![];
+        
+        // Count center owner
+        if let Option::Some(owner) = cell_map.get_captured_by(center) {
+            add_or_increment_owner(ref owner_counts, owner);
+        }
+        
+        // Count neighbor owners
+        let mut i = 0;
+        while i < neighbors.len() {
+            if let Option::Some(owner) = cell_map.get_captured_by(neighbors.at(i)) {
+                add_or_increment_owner(ref owner_counts, owner);
+            }
+            i += 1;
+        };
+        
+        // Find the owner with the most tiles
+        get_owner_with_max_count(@owner_counts)
+    }
+
     // Get cells that should be replaced after hexagon capture
     fn get_cells_to_replace(self: @GameLogic, hexagon_centers: @Array<HexCoordinate>) -> Array<HexCoordinate> {
         let mut cells_to_replace = array![];
@@ -185,54 +258,96 @@ pub impl GameLogicImpl of GameLogicTrait {
         // Create a CellMap for O(1) lookups
         let mut cell_map = CellMapTrait::from_array(grid_scenario);
 
-        // Identify cells being captured in this turn
+        // Get the player making the turn
+        let player_address = get_player_address(*turn.player_index);
+
+        // 1. Apply captures from this turn
         let mut i = 0;
         while i < turn.tile_positions.len() {
             let coord = turn.tile_positions.at(i);
 
             let is_locked = cell_map.is_locked(coord);
+            let captured_by = cell_map.get_captured_by(coord);
             
-            // Check if the cell at this position is not already locked
+            // Check if the cell can be captured
             if !is_locked {
-                cells_captured.append(*coord);
+                // If uncaptured, or captured by the same player
+                if captured_by.is_none() || captured_by == Option::Some(player_address) {
+                    cells_captured.append(*coord);
+                    // Update the cell map with the capture
+                    cell_map.set_captured_by(coord, Option::Some(player_address));
+                }
             }
             
             i += 1;
         };
 
-        // Find hexagon formations from the captured cells
-        hexagons_formed = self.find_hexagon_formations(turn.tile_positions);
+        // 2. Find all hexagon formations by checking the entire grid
+        let all_hexagons = self.find_all_hexagon_formations(ref cell_map);
+        
+        // 3. Process each hexagon: determine majority and lock centers
+        let mut i = 0;
+        while i < all_hexagons.len() {
+            let center = all_hexagons.at(i);
+            
+            // Only process if center is not already locked
+            if !cell_map.is_locked(center) {
+                // Determine majority owner
+                if let Option::Some(majority_owner) = self.get_hexagon_majority_owner(ref cell_map, center) {
+                    // Lock the center for the majority owner
+                    cell_map.set_locked_by(center, Option::Some(majority_owner));
+                    cell_map.set_captured_by(center, Option::Some(majority_owner));
+                    hexagons_formed.append(*center);
+                }
+            }
+            
+            i += 1;
+        };
 
-        // Find super hexagon formations
+        // 4. Find super hexagon formations after locking
         superhexagons_formed = self.find_super_hexagon_formations(ref cell_map);
 
-        // Get tiles that need to be replaced due to hexagon formations
-        if hexagons_formed.len() > 0 {
-            tiles_replaced = self.get_cells_to_replace(@hexagons_formed);
-        }
-        
-        // Add super hexagon tiles to tiles that need to be replaced
-        if superhexagons_formed.len() > 0 {
-            let mut i = 0;
-            while i < superhexagons_formed.len() {
-                let super_center = superhexagons_formed.at(i);
-                // Add the center
-                if !contains_coord(@tiles_replaced, super_center) {
-                    tiles_replaced.append(*super_center);
+        // 5. Build list of tiles to replace
+        // For regular hexagons: replace surrounding unlocked tiles
+        let mut i = 0;
+        while i < hexagons_formed.len() {
+            let center = hexagons_formed.at(i);
+            let neighbors = self.grid.get_neighbors(center);
+            
+            let mut j = 0;
+            while j < neighbors.len() {
+                let neighbor = neighbors.at(j);
+                // Only replace if not locked
+                if !cell_map.is_locked(neighbor) && !contains_coord(@tiles_replaced, neighbor) {
+                    tiles_replaced.append(*neighbor);
                 }
-                // Add all neighbors
-                let neighbors = self.grid.get_neighbors(super_center);
-                let mut j = 0;
-                while j < neighbors.len() {
-                    let neighbor = neighbors.at(j);
-                    if !contains_coord(@tiles_replaced, neighbor) {
-                        tiles_replaced.append(*neighbor);
-                    }
-                    j += 1;
-                };
-                i += 1;
+                j += 1;
             };
-        }
+            i += 1;
+        };
+        
+        // For super hexagons: replace all 7 tiles
+        let mut i = 0;
+        while i < superhexagons_formed.len() {
+            let super_center = superhexagons_formed.at(i);
+            
+            // Add the center
+            if !contains_coord(@tiles_replaced, super_center) {
+                tiles_replaced.append(*super_center);
+            }
+            
+            // Add all neighbors
+            let neighbors = self.grid.get_neighbors(super_center);
+            let mut j = 0;
+            while j < neighbors.len() {
+                let neighbor = neighbors.at(j);
+                if !contains_coord(@tiles_replaced, neighbor) {
+                    tiles_replaced.append(*neighbor);
+                }
+                j += 1;
+            };
+            i += 1;
+        };
 
         TurnSideEffects {
             cells_captured,
@@ -252,6 +367,70 @@ fn get_letter_at(index: u32) -> felt252 {
         15 => 'P', 16 => 'Q', 17 => 'R', 18 => 'S', 19 => 'T',
         20 => 'U', 21 => 'V', 22 => 'W', 23 => 'X', 24 => 'Y',
         25 => 'Z', _ => 'A',
+    }
+}
+
+// Helper function to get player address from index (for testing)
+fn get_player_address(player_index: u8) -> ContractAddress {
+    match player_index {
+        0 => contract_address_const::<'P1'>(),
+        1 => contract_address_const::<'P2'>(),
+        _ => contract_address_const::<'P1'>(),
+    }
+}
+
+// Helper function to add or increment owner count
+fn add_or_increment_owner(ref owner_counts: Array<(ContractAddress, u32)>, owner: ContractAddress) {
+    let mut found = false;
+    let mut i = 0;
+    let mut new_counts = array![];
+    
+    while i < owner_counts.len() {
+        let (current_owner, count) = *owner_counts.at(i);
+        if current_owner == owner {
+            new_counts.append((current_owner, count + 1));
+            found = true;
+        } else {
+            new_counts.append((current_owner, count));
+        }
+        i += 1;
+    };
+    
+    if !found {
+        new_counts.append((owner, 1));
+    }
+    
+    owner_counts = new_counts;
+}
+
+// Helper function to get owner with maximum count
+fn get_owner_with_max_count(owner_counts: @Array<(ContractAddress, u32)>) -> Option<ContractAddress> {
+    if owner_counts.len() == 0 {
+        return Option::None;
+    }
+    
+    let mut max_owner = Option::None;
+    let mut max_count = 0;
+    let mut tie = false;
+    
+    let mut i = 0;
+    while i < owner_counts.len() {
+        let (owner, count) = *owner_counts.at(i);
+        if count > max_count {
+            max_owner = Option::Some(owner);
+            max_count = count;
+            tie = false;
+        } else if count == max_count && max_count > 0 {
+            tie = true;
+        }
+        i += 1;
+    };
+    
+    // Return None if there's a tie (no majority)
+    if tie {
+        Option::None
+    } else {
+        max_owner
     }
 }
 
@@ -392,8 +571,8 @@ mod tests {
         
         let side_effects = game.calculate_turn(@cells, @turn);
         
-        // Should capture 7 cells
-        assert(side_effects.cells_captured.len() == 7, 'Should capture 7 cells');
+        // Should capture 6 cells (cannot capture Northwest owned by P2)
+        assert(side_effects.cells_captured.len() == 6, 'Should capture 6 cells');
         
         // Should form 1 hexagon
         assert(side_effects.hexagons_formed.len() == 1, 'Should form 1 hexagon');
