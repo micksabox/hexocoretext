@@ -1,5 +1,7 @@
-use crate::models::{HexCoordinate, TileSwap};
+use crate::models::{HexCoordinate, TileSwap, GameState};
 use starknet::ContractAddress;
+use hexcore_logic::types::{CellData, TurnSideEffects, TileSwap as CoreTileSwap};
+use crate::type_conversions::{dojo_to_core_coords, dojo_to_core_coord, core_to_dojo_coord};
 
 // Interface for the game system
 #[starknet::interface]
@@ -17,22 +19,26 @@ pub trait IGameActions<T> {
         merkle_proof: Array<felt252>
     ) -> bool;
     fn get_current_player(self: @T, game_id: u32) -> ContractAddress;
+    fn get_game_state(self: @T, game_id: u32) -> GameState;
+
 }
 
 // Dojo contract implementation
 #[dojo::contract]
 pub mod game_actions {
-    use super::{IGameActions, HexCoordinate, TileSwap};
+    use super::{IGameActions, HexCoordinate, TileSwap, CellData, TurnSideEffects, CoreTileSwap, dojo_to_core_coords, dojo_to_core_coord, core_to_dojo_coord};
     use starknet::{ContractAddress, get_caller_address, get_block_timestamp};
     use crate::models::{
         GameState, Player, Cell, GamePlayer,
-        GameCreated, PlayerJoined, GameStarted
+        GameCreated, PlayerJoined, GameStarted, GameOver
     };
     use crate::constants::{
         NAMESPACE, DEFAULT_GRID_SIZE, DEFAULT_SCORE_LIMIT, DEFAULT_MIN_WORD_LENGTH
     };
+    use hexcore_logic::{PlayerTurn, GameLogicTrait, GameConfig};
     use dojo::model::{ModelStorage};
     use dojo::event::EventStorage;
+    use core::poseidon::poseidon_hash_span;
     
     #[abi(embed_v0)]
     impl GameActionsImpl of IGameActions<ContractState> {
@@ -158,13 +164,61 @@ pub mod game_actions {
             
             let current_player = self.get_player_by_index(game_id, game_state.current_player_index);
             assert(player_address == current_player, 'Not your turn');
+              
+            // Build grid scenario from current cells
+            let grid_scenario = self.build_grid_scenario(game_id);
             
-            // TODO: Implement full turn logic with hexcore_logic integration
-            // For now, just rotate turns
+            // Create PlayerTurn for hexcore_logic
+            let player_turn = PlayerTurn {
+                player_index: game_state.current_player_index,
+                word: self.word_to_bytes(@word),
+                tile_positions: dojo_to_core_coords(@tile_positions),
+                tile_swap: self.convert_tile_swap(tile_swap),
+                merkle_proof,
+            };
             
-            // Move to next player
-            game_state.current_player_index = (game_state.current_player_index + 1) % game_state.player_count;
-            world.write_model(@game_state);
+            // Calculate turn using hexcore_logic
+            let game_logic = GameLogicTrait::new(GameConfig {
+                grid_size: game_state.grid_size,
+                min_word_length: game_state.min_word_length,
+                score_limit: game_state.score_limit,
+            });
+            
+            let side_effects = match game_logic.calculate_turn(@grid_scenario, @player_turn) {
+                Result::Ok(effects) => effects,
+                Result::Err(_error) => {
+                    // Handle validation error
+                    return false;
+                }
+            };
+            
+            // Apply side effects
+            self.apply_turn_side_effects(game_id, player_address, @side_effects);  
+            
+            // Check if game is over
+            match InternalFunctionsTrait::is_game_over(@self, game_id) {
+                Option::Some(winner_address) => {
+                    // Game is over, update state and emit event
+                    game_state.is_active = false;
+                    game_state.winner = Option::Some(winner_address);
+                    world.write_model(@game_state);
+                    
+                    // Get winner's score for the event
+                    let winner: Player = world.read_model((game_id, winner_address));
+                    
+                    // Emit game over event
+                    world.emit_event(@GameOver {
+                        game_id,
+                        winner: winner_address,
+                        final_score: winner.score,
+                    });
+                },
+                Option::None => {
+                    // Game continues, move to next player
+                    game_state.current_player_index = (game_state.current_player_index + 1) % game_state.player_count;
+                    world.write_model(@game_state);
+                }
+            }
             
             true
         }
@@ -173,6 +227,11 @@ pub mod game_actions {
             let world = self.world(NAMESPACE());
             let game_state: GameState = world.read_model(game_id);
             self.get_player_by_index(game_id, game_state.current_player_index)
+        }
+        
+        fn get_game_state(self: @ContractState, game_id: u32) -> GameState {
+            let world = self.world(NAMESPACE());
+            world.read_model(game_id)
         }
     }
     
@@ -226,6 +285,194 @@ pub mod game_actions {
             let world = self.world(NAMESPACE());
             let game_player: GamePlayer = world.read_model((game_id, index));
             game_player.address
+        }
+        
+        fn build_grid_scenario(self: @ContractState, game_id: u32) -> Array<CellData> {
+            let world = self.world(NAMESPACE());
+            let game_state: GameState = world.read_model(game_id);
+            let grid_size_i32: i32 = game_state.grid_size.into();
+            
+            let mut grid_scenario = array![];
+            
+            // Iterate through all coordinates in the grid
+            let mut q = -grid_size_i32;
+            while q <= grid_size_i32 {
+                let r_min = if q < 0 { -grid_size_i32 - q } else { -grid_size_i32 };
+                let r_max = if q > 0 { grid_size_i32 } else { grid_size_i32 - q };
+                
+                let mut r = r_min;
+                while r <= r_max {
+                    // Read the cell from storage
+                    let cell: Cell = world.read_model((game_id, q, r));
+                    
+                    // Convert to CellData for hexcore_logic
+                    let cell_data = CellData {
+                        coordinate: hexcore_logic::types::HexCoordinate { q, r },
+                        letter: cell.letter,
+                        captured_by: cell.captured_by,
+                        locked_by: cell.locked_by,
+                    };
+                    
+                    grid_scenario.append(cell_data);
+                    r += 1;
+                };
+                q += 1;
+            };
+            
+            grid_scenario
+        }
+        
+        fn word_to_bytes(self: @ContractState, word: @ByteArray) -> Array<u8> {
+            let mut bytes = array![];
+            let mut i = 0;
+            while i < word.len() {
+                if let Option::Some(byte) = word.at(i) {
+                    bytes.append(byte);
+                }
+                i += 1;
+            };
+            bytes
+        }
+        
+        fn convert_tile_swap(self: @ContractState, tile_swap: Option<TileSwap>) -> Option<CoreTileSwap> {
+            match tile_swap {
+                Option::Some(swap) => {
+                    Option::Some(CoreTileSwap {
+                        from: dojo_to_core_coord(@swap.from),
+                        to: dojo_to_core_coord(@swap.to),
+                    })
+                },
+                Option::None => Option::None,
+            }
+        }
+        
+        fn apply_turn_side_effects(self: @ContractState, game_id: u32, player_address: ContractAddress, side_effects: @TurnSideEffects) {
+            let mut world = self.world(NAMESPACE());
+            
+            // Apply cell captures
+            let mut i = 0;
+            while i < side_effects.cells_captured.len() {
+                let coord = side_effects.cells_captured[i];
+                let dojo_coord = core_to_dojo_coord(coord);
+                let mut cell: Cell = world.read_model((game_id, dojo_coord.q, dojo_coord.r));
+                cell.captured_by = Option::Some(player_address);
+                world.write_model(@cell);
+                i += 1;
+            };
+            
+            // Apply hexagon formations (lock centers)
+            let mut i = 0;
+            while i < side_effects.hexagons_formed.len() {
+                let center_coord = side_effects.hexagons_formed[i];
+                let dojo_coord = core_to_dojo_coord(center_coord);
+                let mut cell: Cell = world.read_model((game_id, dojo_coord.q, dojo_coord.r));
+                cell.locked_by = Option::Some(player_address);
+                world.write_model(@cell);
+                i += 1;
+            };
+            
+            // Apply tile replacements
+            let mut i = 0;
+            while i < side_effects.tiles_replaced.len() {
+                let coord = side_effects.tiles_replaced[i];
+                let dojo_coord = core_to_dojo_coord(coord);
+                let mut cell: Cell = world.read_model((game_id, dojo_coord.q, dojo_coord.r));
+                
+                // Generate new letter using poseidon hash
+                let hash = poseidon_hash_span([
+                    game_id.into(), 
+                    dojo_coord.q.into(), 
+                    dojo_coord.r.into(),
+                    starknet::get_block_timestamp().into()
+                ].span());
+                let hash_u256: u256 = hash.into();
+                let letter_index = (hash_u256 % 26).try_into().unwrap();
+                cell.letter = self.get_letter_at(letter_index);
+                
+                // Clear capture and lock status
+                cell.captured_by = Option::None;
+                cell.locked_by = Option::None;
+                
+                world.write_model(@cell);
+                i += 1;
+            };
+            
+            // Update player scores
+            let mut i = 0;
+            while i < side_effects.points_awarded.len() {
+                let (player, points) = *side_effects.points_awarded[i];
+                let mut player_model: Player = world.read_model((game_id, player));
+                player_model.score += points;
+                world.write_model(@player_model);
+                i += 1;
+            };
+            
+            // These variables are for counting but not currently used in the event
+            let _cells_captured_count: u8 = side_effects.cells_captured.len().try_into().unwrap();
+            let _hexagons_count: u8 = side_effects.hexagons_formed.len().try_into().unwrap();
+            
+            // TODO: Emit TurnSubmitted event with proper word and turn_number
+            // world.emit_event(@TurnSubmitted {
+            //     game_id,
+            //     turn_number: 0, // TODO: Get actual turn number
+            //     player: player_address,
+            //     word: "", // TODO: Get actual word from turn
+            //     points_scored: side_effects.score_gain,
+            // });
+        }
+        
+        fn get_letter_at(self: @ContractState, index: u32) -> felt252 {
+            match index {
+                0 => 'A',
+                1 => 'B',
+                2 => 'C',
+                3 => 'D',
+                4 => 'E',
+                5 => 'F',
+                6 => 'G',
+                7 => 'H',
+                8 => 'I',
+                9 => 'J',
+                10 => 'K',
+                11 => 'L',
+                12 => 'M',
+                13 => 'N',
+                14 => 'O',
+                15 => 'P',
+                16 => 'Q',
+                17 => 'R',
+                18 => 'S',
+                19 => 'T',
+                20 => 'U',
+                21 => 'V',
+                22 => 'W',
+                23 => 'X',
+                24 => 'Y',
+                25 => 'Z',
+                _ => 'A',
+            }
+        }
+        
+        fn is_game_over(self: @ContractState, game_id: u32) -> Option<ContractAddress> {
+            let world = self.world(NAMESPACE());
+            let game_state: GameState = world.read_model(game_id);
+            
+            // Check if any player has reached the score limit and return their address
+            let mut i = 0;
+            let mut winner = Option::None;
+            while i < game_state.player_count {
+                let player_address = self.get_player_by_index(game_id, i);
+                let player: Player = world.read_model((game_id, player_address));
+                
+                if player.score >= game_state.score_limit {
+                    winner = Option::Some(player_address);
+                    break;
+                }
+                
+                i += 1;
+            };
+            
+            winner
         }
     }
 }

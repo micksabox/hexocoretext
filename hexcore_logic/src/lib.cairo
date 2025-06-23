@@ -11,7 +11,7 @@ pub mod cell_map;
 pub mod tests;
 
 // Re-export main types and functions
-pub use types::{HexCoordinate, Direction, CellData};
+pub use types::{HexCoordinate, Direction, CellData, PlayerTurn};
 pub use hex_grid::{HexGrid, HexGridTrait};
 pub use game_logic::{GameLogic, GameLogicTrait, GameConfig};
 pub use word_validator::{WordValidator, WordValidatorTrait};

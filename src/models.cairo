@@ -54,7 +54,7 @@ pub struct Cell {
     pub q: i32,
     #[key]
     pub r: i32,
-    pub letter: u8, // ASCII value of the letter
+    pub letter: felt252, // ASCII value of the letter
     pub captured_by: Option<ContractAddress>,
     pub locked_by: Option<ContractAddress>,
 }

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__sensei__dojo_sensei"
+    ],
+    "deny": []
+  }
+}

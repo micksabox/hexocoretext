@@ -23,7 +23,8 @@ fn test_create_game() {
     
     // Verify grid cells were created (check center cell)
     let center_cell: Cell = world.read_model((game_id, 0, 0));
-    assert(center_cell.letter >= 65 && center_cell.letter <= 90, 'Invalid letter');
+    let letter_num: u32 = center_cell.letter.try_into().unwrap();
+    assert(letter_num >= 65 && letter_num <= 90, 'Invalid letter');
     assert(center_cell.captured_by.is_none(), 'Cell should not be captured');
     assert(center_cell.locked_by.is_none(), 'Cell should not be locked');
 }
