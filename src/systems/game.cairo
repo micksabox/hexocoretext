@@ -459,20 +459,25 @@ pub mod game_actions {
             
             // Check if any player has reached the score limit and return their address
             let mut i = 0;
-            let mut winner = Option::None;
-            while i < game_state.player_count {
+            let mut result = Option::None;
+            
+            loop {
+                if i >= game_state.player_count {
+                    break;
+                }
+                
                 let player_address = self.get_player_by_index(game_id, i);
                 let player: Player = world.read_model((game_id, player_address));
                 
                 if player.score >= game_state.score_limit {
-                    winner = Option::Some(player_address);
+                    result = Option::Some(player_address);
                     break;
                 }
                 
                 i += 1;
             };
             
-            winner
+            result
         }
     }
 }

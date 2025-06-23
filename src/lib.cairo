@@ -6,7 +6,4 @@ pub mod systems {
 }
 
 #[cfg(test)]
-mod tests {
-    mod game_tests;
-    mod test_utils;
-}
+mod tests;
