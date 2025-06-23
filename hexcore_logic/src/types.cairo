@@ -65,6 +65,7 @@ pub struct TurnSideEffects {
     pub hexagons_formed: Array<HexCoordinate>,  // Centers of hexagons
     pub superhexagons_formed: Array<HexCoordinate>,  // Centers of super hexagons
     pub tiles_replaced: Array<HexCoordinate>,
+    pub points_awarded: Array<(ContractAddress, u32)>,  // Player address and points awarded
 }
 
 // Trait definition for HexCoordinate

@@ -290,6 +290,7 @@ pub impl GameLogicImpl of GameLogicTrait {
         let all_hexagons = self.find_all_hexagon_formations(ref cell_map);
         
         // 3. Process each hexagon: determine majority and lock centers
+        let mut points_awarded = array![];
         let mut i = 0;
         while i < all_hexagons.len() {
             let center = all_hexagons.at(i);
@@ -302,6 +303,9 @@ pub impl GameLogicImpl of GameLogicTrait {
                     cell_map.set_locked_by(center, Option::Some(majority_owner));
                     cell_map.set_captured_by(center, Option::Some(majority_owner));
                     hexagons_formed.append(*center);
+                    
+                    // Award 1 point to the majority owner for forming a hexagon
+                    add_points_to_player(ref points_awarded, majority_owner, 1);
                 }
             }
             
@@ -358,6 +362,7 @@ pub impl GameLogicImpl of GameLogicTrait {
             hexagons_formed,
             superhexagons_formed,
             tiles_replaced,
+            points_awarded,
         })
     }
 }
@@ -375,7 +380,7 @@ fn get_letter_at(index: u32) -> felt252 {
 }
 
 // Helper function to get player address from index (for testing)
-fn get_player_address(player_index: u8) -> ContractAddress {
+pub fn get_player_address(player_index: u8) -> ContractAddress {
     match player_index {
         0 => contract_address_const::<'P1'>(),
         1 => contract_address_const::<'P2'>(),
@@ -438,9 +443,33 @@ fn get_owner_with_max_count(owner_counts: @Array<(ContractAddress, u32)>) -> Opt
     }
 }
 
+// Helper function to add points to a player
+fn add_points_to_player(ref points_awarded: Array<(ContractAddress, u32)>, player: ContractAddress, points: u32) {
+    let mut found = false;
+    let mut i = 0;
+    let mut new_points = array![];
+    
+    while i < points_awarded.len() {
+        let (current_player, current_points) = *points_awarded.at(i);
+        if current_player == player {
+            new_points.append((current_player, current_points + points));
+            found = true;
+        } else {
+            new_points.append((current_player, current_points));
+        }
+        i += 1;
+    };
+    
+    if !found {
+        new_points.append((player, points));
+    }
+    
+    points_awarded = new_points;
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{GameLogic, GameLogicTrait, GameConfig, CellData, HexCoordinate, get_letter_at, PlayerTurn};
+    use super::{GameLogic, GameLogicTrait, GameConfig, CellData, HexCoordinate, get_letter_at, PlayerTurn, get_player_address};
     use super::super::grid_scenario::{map_scenario_to_cells, gs, gs_captured};
 
     // Constants for players
@@ -540,6 +569,9 @@ mod tests {
         
         // No tiles should be replaced
         assert(side_effects.tiles_replaced.len() == 0, 'No tiles replaced');
+        
+        // No points should be awarded
+        assert(side_effects.points_awarded.len() == 0, 'No points awarded');
     }
 
     #[test]
@@ -592,5 +624,11 @@ mod tests {
         
         // Should replace 6 tiles (the neighbors of the center)
         assert(side_effects.tiles_replaced.len() == 6, 'Should replace 6 tiles');
+        
+        // Should award 1 point to player 1 (majority owner)
+        assert(side_effects.points_awarded.len() == 1, 'Should award points');
+        let (player, points) = *side_effects.points_awarded.at(0);
+        assert(player == get_player_address(0), 'Points to player 1');
+        assert(points == 1, 'Should award 1 point');
     }
 }

@@ -52,6 +52,9 @@ fn test_super_hexagon_detection() {
     
     // All 7 tiles should be marked for replacement
     assert(side_effects.tiles_replaced.len() >= 7, 'Should replace all 7 tiles');
+    
+    // No points awarded (all tiles already locked, no new hexagons formed)
+    assert(side_effects.points_awarded.len() == 0, 'No points for super hexagon');
 }
 
 #[test]
@@ -92,6 +95,9 @@ fn test_super_hexagon_mixed_locks() {
     
     // Should detect a super hexagon (all locked, mixed ownership is OK)
     assert(side_effects.superhexagons_formed.len() == 1, 'Should find super hexagon');
+    
+    // No points awarded (no new hexagons formed)
+    assert(side_effects.points_awarded.len() == 0, 'No points for super hexagon');
 }
 
 #[test]

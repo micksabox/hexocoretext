@@ -73,20 +73,21 @@ Edge cases covered:
 - Overlapping hexagons
 - Chain formations
 
-### 4. Scoring Tests (`scoring_tests.cairo`)
+### 4. Scoring Tests (`scoring_tests.cairo`) ✅
 
 Tests point calculation mechanics:
-- **Basic word scoring**: 1 point per captured tile
-- **Hexagon bonus**: 3 additional points per hexagon
-- **Multiple hexagon scoring**: Cumulative bonuses
+- **Hexagon formation scoring**: 1 point per hexagon formed (center locked)
+- **Multiple hexagon scoring**: Multiple points for multiple hexagons
 - **Opponent hexagon formation**: Points go to majority holder
-- **Score limit detection**: Game ends at 16 points (configurable)
+- **No points for ties**: Tied majority (3-3 split) awards no points
+- **Super hexagon clarification**: No additional points for super hexagons
+- **Cross-player scoring**: Both players can score in same turn
 
 Edge cases covered:
-- Zero score turns
-- Exactly reaching score limit
-- Exceeding score limit
-- Tied scores
+- Zero score turns (no hexagons formed)
+- Already locked hexagons (no new points)
+- Player scoring on opponent's turn
+- Super hexagon formation (only 1 point from original hexagon)
 
 ### 5. Tile Swap Tests (`tile_swap_tests.cairo`)
 

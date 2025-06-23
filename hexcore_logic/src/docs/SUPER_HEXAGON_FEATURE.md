@@ -68,3 +68,17 @@ The feature includes comprehensive tests in `super_hexagon_tests.cairo`:
 - Uses the efficient `CellMap` structure for O(1) lookups
 - Only checks valid grid coordinates
 - Minimal overhead added to turn processing
+
+## Points System Clarification
+
+Important: Super hexagons do NOT award points. The points system works as follows:
+
+1. **Points are only awarded when hexagons are formed** - When a hexagon pattern is completed and the center tile is locked to the majority owner, that player receives 1 point.
+
+2. **Super hexagon detection happens AFTER point calculation** - The game first processes regular hexagon formations (which award points), then checks for super hexagons.
+
+3. **Super hexagons only affect tile replacement** - When a super hexagon is detected, all 7 tiles are marked for replacement. This is the only effect of a super hexagon.
+
+4. **No double scoring** - If a turn completes both a regular hexagon and creates a super hexagon, only 1 point is awarded (from the initial hexagon formation).
+
+Example: If all tiles in a hexagon pattern are already locked and form a super hexagon, no points are awarded because no new hexagon was formed during the turn.
