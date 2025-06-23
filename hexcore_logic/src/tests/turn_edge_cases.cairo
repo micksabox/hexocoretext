@@ -46,7 +46,10 @@ fn test_hexagon_completion_by_other_player() {
         merkle_proof: array![],
     };
     
-    let side_effects = game.calculate_turn(@cells, @turn);
+    let result = game.calculate_turn(@cells, @turn);
+    assert(result.is_ok(), 'Turn should be valid');
+    
+    let side_effects = result.unwrap();
     
     // Should capture 3 cells (the uncaptured ones)
     assert(side_effects.cells_captured.len() == 3, 'Should capture 3 cells');
@@ -87,7 +90,10 @@ fn test_cannot_capture_opponent_tiles() {
         merkle_proof: array![],
     };
     
-    let side_effects = game.calculate_turn(@cells, @turn);
+    let result = game.calculate_turn(@cells, @turn);
+    assert(result.is_ok(), 'Turn should be valid');
+    
+    let side_effects = result.unwrap();
     
     // Should only capture 2 cells (center and southeast)
     // Cannot capture North and Northeast owned by P2
@@ -120,7 +126,10 @@ fn test_hexagon_with_mixed_ownership() {
         merkle_proof: array![],
     };
     
-    let side_effects = game.calculate_turn(@cells, @turn);
+    let result = game.calculate_turn(@cells, @turn);
+    assert(result.is_ok(), 'Turn should be valid');
+    
+    let side_effects = result.unwrap();
     
     // No new captures
     assert(side_effects.cells_captured.len() == 0, 'No new captures');

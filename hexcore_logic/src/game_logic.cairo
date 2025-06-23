@@ -1,6 +1,7 @@
 use super::types::{HexCoordinate, CellData, PlayerTurn, TurnSideEffects};
 use super::hex_grid::{HexGrid, HexGridTrait, contains_coord};
 use super::cell_map::{CellMap, CellMapTrait};
+use super::turn_validator::{TurnValidator, TurnValidationError};
 use core::poseidon::poseidon_hash_span;
 use starknet::{ContractAddress, contract_address_const};
 
@@ -249,7 +250,7 @@ pub impl GameLogicImpl of GameLogicTrait {
         self: @GameLogic, 
         grid_scenario: @Array<CellData>,
         turn: @PlayerTurn
-    ) -> TurnSideEffects {
+    ) -> Result<TurnSideEffects, TurnValidationError> {
         let mut cells_captured = array![];
         let mut hexagons_formed = array![];
         let mut superhexagons_formed = array![];
@@ -257,6 +258,9 @@ pub impl GameLogicImpl of GameLogicTrait {
 
         // Create a CellMap for O(1) lookups
         let mut cell_map = CellMapTrait::from_array(grid_scenario);
+        
+        // Validate the turn
+        TurnValidator::validate_turn(turn, ref cell_map, self.grid)?;
 
         // Get the player making the turn
         let player_address = get_player_address(*turn.player_index);
@@ -349,12 +353,12 @@ pub impl GameLogicImpl of GameLogicTrait {
             i += 1;
         };
 
-        TurnSideEffects {
+        Result::Ok(TurnSideEffects {
             cells_captured,
             hexagons_formed,
             superhexagons_formed,
             tiles_replaced,
-        }
+        })
     }
 }
 
@@ -520,7 +524,10 @@ mod tests {
             },
         ];
         
-        let side_effects = game.calculate_turn(@grid_scenario, @turn);
+        let result = game.calculate_turn(@grid_scenario, @turn);
+        assert(result.is_ok(), 'Turn should be valid');
+        
+        let side_effects = result.unwrap();
         
         // Should capture 3 cells
         assert(side_effects.cells_captured.len() == 3, 'Should capture 3 cells');
@@ -569,7 +576,10 @@ mod tests {
         
         let cells = map_scenario_to_cells(1, grid_scenario);
         
-        let side_effects = game.calculate_turn(@cells, @turn);
+        let result = game.calculate_turn(@cells, @turn);
+        assert(result.is_ok(), 'Turn should be valid');
+        
+        let side_effects = result.unwrap();
         
         // Should capture 6 cells (cannot capture Northwest owned by P2)
         assert(side_effects.cells_captured.len() == 6, 'Should capture 6 cells');

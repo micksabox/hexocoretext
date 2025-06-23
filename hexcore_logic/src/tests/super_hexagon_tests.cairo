@@ -37,7 +37,10 @@ fn test_super_hexagon_detection() {
         merkle_proof: array![],
     };
     
-    let side_effects = game.calculate_turn(@cells, @turn);
+    let result = game.calculate_turn(@cells, @turn);
+    assert(result.is_ok(), 'Turn should be valid');
+    
+    let side_effects = result.unwrap();
     
     // Should detect 1 super hexagon
     assert(side_effects.superhexagons_formed.len() == 1, 'Should find 1 super hexagon');
@@ -82,7 +85,10 @@ fn test_super_hexagon_mixed_locks() {
         merkle_proof: array![],
     };
     
-    let side_effects = game.calculate_turn(@cells, @turn);
+    let result = game.calculate_turn(@cells, @turn);
+    assert(result.is_ok(), 'Turn should be valid');
+    
+    let side_effects = result.unwrap();
     
     // Should detect a super hexagon (all locked, mixed ownership is OK)
     assert(side_effects.superhexagons_formed.len() == 1, 'Should find super hexagon');
@@ -119,7 +125,10 @@ fn test_no_super_hexagon_not_all_locked() {
         merkle_proof: array![],
     };
     
-    let side_effects = game.calculate_turn(@cells, @turn);
+    let result = game.calculate_turn(@cells, @turn);
+    assert(result.is_ok(), 'Turn should be valid');
+    
+    let side_effects = result.unwrap();
     
     // Should not detect any super hexagon (one cell not locked)
     assert(side_effects.superhexagons_formed.len() == 0, 'No super hexagon unlocked');
@@ -164,7 +173,10 @@ fn test_super_hexagon_replacement_includes_all() {
         merkle_proof: array![],
     };
     
-    let side_effects = game.calculate_turn(@cells, @turn);
+    let result = game.calculate_turn(@cells, @turn);
+    assert(result.is_ok(), 'Turn should be valid');
+    
+    let side_effects = result.unwrap();
     
     // Should not form new hexagon (center already locked), but super hexagon exists
     assert(side_effects.hexagons_formed.len() == 0, 'No new hexagon formed');

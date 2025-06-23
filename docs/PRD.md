@@ -54,6 +54,12 @@ The game should be designed initially for the web but be built so that core comp
 
 - Letter chain checks. The player submits a transaction including an array of hex tiles {position} they are capturing during their turn. The contract should check each tile submitted and ensure they are not already captured or locked, or if they are captured or locked, then ensure that it is their own tile and hasn't been captured/locked by another player. The contract should strictly enforce the rule that the tiles must be neighbours with each other, and that each of the positions are distinct and exist within the range of the grid.
 
+- Turn validation checks:
+  - Tile positions must be distinct (no duplicates allowed)
+  - Tile swaps must be between adjacent tiles (distance of 1)
+  - Tile swaps cannot involve locked tiles
+  - Cannot swap a tile with itself
+
 ### Smart Contract System
 - Gameplay logic is executed on-chain on the Starknet network.
 - Contract emitted events are captured by the Torii indexer infrastructure and game state is saved.
