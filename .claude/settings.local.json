@@ -15,7 +15,8 @@
       "Bash(find:*)",
       "mcp__sensei__dojo_model",
       "mcp__sensei__dojo_101",
-      "mcp__sensei__dojo_logic"
+      "mcp__sensei__dojo_logic",
+      "Bash(torii:*)"
     ],
     "deny": []
   }
